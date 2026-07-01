@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#e63946" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="KartuliGo" />
+  <meta name="description" content="Мини-самоучитель грузинского языка: алфавит, слова, карточки, произношение, тесты и прогресс." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png" />
+  <link rel="stylesheet" href="styles.css" />
+  <title>KartuliGo — самоучитель грузинского</title>
+</head>
+<body>
+  <div class="bg-orb orb-a"></div>
+  <div class="bg-orb orb-b"></div>
+  <div class="app-shell">
+    <header class="topbar">
+      <button class="brand" data-route="home" aria-label="Главный экран">
+        <span class="brand-mark">ქ</span>
+        <span><strong>KartuliGo</strong><small>грузинский самоучитель</small></span>
+      </button>
+      <div class="top-actions">
+        <button class="pill ghost" id="scriptToggle" type="button" title="Переключить грузинское письмо/транслит">ქართული</button>
+        <button class="pill ghost" id="themeToggle" type="button" title="Сменить тему">☀︎</button>
+        <button class="pill accent" id="iphoneBtn" type="button">iPhone</button>
+      </div>
+    </header>
+    <main id="app" class="app" aria-live="polite"></main>
+    <nav class="bottom-nav" aria-label="Разделы приложения">
+      <button data-route="home" class="active"><span>🏠</span><b>Уроки</b></button>
+      <button data-route="cards"><span>🃏</span><b>Карточки</b></button>
+      <button data-route="alphabet"><span>ა</span><b>Азбука</b></button>
+      <button data-route="profile"><span>🔥</span><b>Прогресс</b></button>
+    </nav>
+  </div>
+
+  <dialog id="installDialog" class="modal">
+    <button class="modal-close" id="closeInstall" aria-label="Закрыть">×</button>
+    <h2>Установка на iPhone</h2>
+    <p>Открой опубликованный сайт в Safari, нажми <b>Поделиться</b> → <b>На экран «Домой»</b> → <b>Добавить</b>. После этого KartuliGo будет открываться как отдельное приложение.</p>
+    <ol>
+      <li>Загрузи файлы в отдельный репозиторий GitHub.</li>
+      <li>Включи GitHub Pages для ветки <b>main</b>.</li>
+      <li>Открой URL на iPhone в Safari и добавь на экран «Домой».</li>
+    </ol>
+    <p class="muted">Озвучка работает через Web Speech API. Если на устройстве нет грузинского голоса, браузер всё равно попробует прочитать текст с языковой меткой ka-GE.</p>
+  </dialog>
+  <script src="app.js" defer></script>
+</body>
+</html>
