@@ -150,7 +150,21 @@
   function makePair(items) { return {type:'pair', items:items.map(item=>({id:item.id,left:displayKa(item),right:item.ru,ka:item.ka})) }; }
   function makeFlash(item) { return {type:'flash', item, flipped:false}; }
   function makeScramble(item) { const tokens=item.ka.split(/\s+/).filter(Boolean); if(tokens.length<2) return makeMcq(item,'ka-ru'); return {type:'scramble', item, prompt:'Собери фразу', answer:item.ka, tokens:shuffle(tokens)}; }
-  function makeLetter(letter, direction) { return {type:'letter', letter, direction}; }
+  function makeLetter(letter, direction) { const answer = direction === 'ka-tr' ? letter.tr : letter.ka; return {type:'letter', letter, direction, answer}; }
+  function getExerciseAnswer(ex) {
+    if (!ex) return '';
+    if (ex.answer !== undefined && ex.answer !== null) return ex.answer;
+    if (ex.type === 'letter' && ex.letter) return ex.direction === 'ka-tr' ? ex.letter.tr : ex.letter.ka;
+    return '';
+  }
+  function describeExercise(ex) {
+    const answer = getExerciseAnswer(ex);
+    if (ex?.item) return `${displayKa(ex.item)} — ${ex.item.ru}`;
+    if (ex?.type === 'letter' && ex.letter) {
+      return `Ответ: ${answer} · ${ex.letter.ka} читается как ${ex.letter.tr} (звук: ${ex.letter.sound})`;
+    }
+    return `Ответ: ${answer}`;
+  }
 
   function renderExercise() {
     if (!session) return setRoute('home');
@@ -193,11 +207,61 @@
   function renderAlphabetPage() { app.innerHTML = `<section class="panel"><span class="kicker">ანბანი</span><h1>Грузинский алфавит</h1><p>Современное письмо мхедрули: 33 буквы, без заглавных и строчных. Тренируй чтение, затем переходи к словам.</p><div class="hero-actions"><button class="btn primary" data-start="alphabet">Тренировать буквы</button><button class="btn" data-route="cards">Открыть карточки</button></div></section><div class="section-title"><h2>Таблица букв</h2><span class="badge">33 буквы</span></div>${renderAlphabetTable()}<div class="section-title"><h2>Краткий гайд</h2><span class="badge">A0 → B2</span></div><section class="guide-grid">${guideCards.map(card=>`<article class="guide-card"><h3>${escapeHtml(card.title)}</h3><p>${escapeHtml(card.body)}</p><ul>${card.points.map(p=>`<li>${escapeHtml(p)}</li>`).join('')}</ul></article>`).join('')}</section>`; }
   function renderProfile() { const hard=Object.values(state.reviews).filter(v=>v==='hard').length; const known=Object.values(state.reviews).filter(v=>v==='known').length; app.innerHTML = `<section class="panel"><span class="kicker">профиль</span><h1>Твой прогресс</h1><p>Все данные сохраняются только в браузере этого устройства.</p><div class="profile-grid"><div class="profile-block"><span>XP</span><strong>${state.xp}</strong></div><div class="profile-block"><span>Серия</span><strong>${state.streak}🔥</strong></div><div class="profile-block"><span>Верно</span><strong>${state.correct}</strong></div><div class="profile-block"><span>Сложные</span><strong>${hard}</strong></div></div><div class="hero-actions"><button class="btn primary" data-start="daily">Тренировка</button><button class="btn" data-route="cards">Повторить карточки</button><button class="btn danger" data-reset-progress>Сбросить прогресс</button></div></section>${renderRoadmap()}<div class="section-title"><h2>История</h2><span class="badge">последние 20 действий</span></div><div class="timeline">${(state.history||[]).length ? state.history.map(h=>`<div class="timeline-item"><div class="timeline-dot">+${h.xp||0}</div><div><b>${escapeHtml(h.text)}</b><br><span class="muted">${escapeHtml(h.date)}</span></div></div>`).join('') : '<div class="empty">Истории пока нет. Пройди первый урок.</div>'}</div>`; }
 
+  function showToast(message) {
+    let toast = document.getElementById('appToast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'appToast';
+      toast.className = 'toast';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add('show');
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(() => toast.classList.remove('show'), 2400);
+  }
+  function getSpeechVoices() {
+    try { return window.speechSynthesis?.getVoices?.() || []; } catch(e) { return []; }
+  }
+  function findVoice(voices, mode='ka') {
+    if (mode === 'ka') return voices.find(v => /^(ka|ka-GE)/i.test(v.lang || '') || /georgian|ქართული/i.test((v.name || '') + ' ' + (v.lang || '')));
+    return voices.find(v => /^(en|ru)/i.test(v.lang || '')) || voices[0];
+  }
   function speak(text, slow=false) {
-    if(!('speechSynthesis' in window)) { alert('В этом браузере нет Web Speech API. На iPhone открой сайт в Safari.'); return; }
-    const utterance = new SpeechSynthesisUtterance(text); utterance.lang = 'ka-GE'; utterance.rate = slow ? 0.68 : 0.9; utterance.pitch = 1;
-    const voices = speechSynthesis.getVoices(); const voice = voices.find(v => /ka|georgian|ქართული/i.test(v.lang + ' ' + v.name)); if(voice) utterance.voice = voice;
-    speechSynthesis.cancel(); speechSynthesis.speak(utterance);
+    const source = String(text || '').trim();
+    if (!source) { showToast('Нет текста для озвучки.'); return; }
+    if(!('speechSynthesis' in window) || !window.SpeechSynthesisUtterance) {
+      showToast('В этом браузере нет озвучки. На iPhone открой сайт в Safari.');
+      return;
+    }
+    const voices = getSpeechVoices();
+    const georgianVoice = findVoice(voices, 'ka');
+    const fallback = romanizeGeorgian(source);
+    const useFallback = !georgianVoice && fallback && fallback !== source;
+    const spokenText = useFallback ? fallback : source;
+    try {
+      const utterance = new SpeechSynthesisUtterance(spokenText);
+      utterance.lang = georgianVoice ? 'ka-GE' : 'en-US';
+      utterance.rate = slow ? 0.68 : 0.88;
+      utterance.pitch = 1;
+      if (georgianVoice) utterance.voice = georgianVoice;
+      else {
+        const fallbackVoice = findVoice(voices, 'fallback');
+        if (fallbackVoice) utterance.voice = fallbackVoice;
+      }
+      utterance.onstart = () => {
+        showToast(useFallback ? `Грузинский голос не найден — читаю транслит: ${spokenText}` : `Слушаем: ${source}`);
+      };
+      utterance.onerror = () => {
+        showToast('Браузер не запустил озвучку. Нажми «Слушать» ещё раз или проверь системные голоса.');
+      };
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+      if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+      setTimeout(() => { try { if (window.speechSynthesis.paused) window.speechSynthesis.resume(); } catch(e) {} }, 120);
+    } catch(e) {
+      showToast('Озвучка не сработала в этом браузере. Попробуй Safari/Chrome или обнови страницу.');
+    }
   }
   function insertAtCursor(input,text) { const start=input.selectionStart ?? input.value.length; const end=input.selectionEnd ?? input.value.length; input.value=input.value.slice(0,start)+text+input.value.slice(end); input.focus(); input.setSelectionRange(start+text.length,start+text.length); }
   function confetti() { const wrap=document.createElement('div'); wrap.className='confetti'; for(let i=0;i<50;i++){const p=document.createElement('i'); p.style.left=`${Math.random()*100}%`; p.style.animationDelay=`${Math.random()*0.25}s`; p.style.background=['#e63946','#2a9d8f','#ffd166','#7c5cff','#6dd5fa'][i%5]; wrap.appendChild(p);} document.body.appendChild(wrap); setTimeout(()=>wrap.remove(),1600); }
@@ -214,7 +278,7 @@
     if(target.dataset.flip !== undefined && session) { const ex=session.exercises[session.index]; ex.flipped=!ex.flipped; $('#exerciseCard').innerHTML=`${renderExerciseBody(ex)}<div id="feedback" class="feedback"></div>`; return; }
     if(target.dataset.cardKnown !== undefined && session) { const ex=session.exercises[session.index]; state.reviews[ex.item.id]='known'; markAnswer(true); showFeedback(true, `${displayKa(ex.item)} — ${ex.item.ru}`); saveState(); return; }
     if(target.dataset.cardHard !== undefined && session) { const ex=session.exercises[session.index]; state.reviews[ex.item.id]='hard'; markAnswer(false); showFeedback(false, `Запомни: ${displayKa(ex.item)} — ${ex.item.ru}`); saveState(); return; }
-    if(target.dataset.option && session) { const ex=session.exercises[session.index]; const ok=normalize(target.dataset.option)===normalize(ex.answer||''); $$('.option').forEach(btn=>{ if(normalize(btn.dataset.option)===normalize(ex.answer||'')) btn.classList.add('correct'); if(btn===target && !ok) btn.classList.add('wrong'); }); markAnswer(ok); const explanation=ex.item?`${displayKa(ex.item)} — ${ex.item.ru}`:`Ответ: ${ex.answer}`; showFeedback(ok, ok ? explanation : `Правильно: ${explanation}`); return; }
+    if(target.dataset.option && session) { const ex=session.exercises[session.index]; const answer=getExerciseAnswer(ex); const ok=normalize(target.dataset.option)===normalize(answer); $$('.option').forEach(btn=>{ if(normalize(btn.dataset.option)===normalize(answer)) btn.classList.add('correct'); if(btn===target && !ok) btn.classList.add('wrong'); }); markAnswer(ok); const explanation=describeExercise(ex); showFeedback(ok, ok ? explanation : `Правильно: ${explanation}`); return; }
     if(target.dataset.checkType !== undefined && session) { const ex=session.exercises[session.index]; const user=$('#typeInput')?.value || ''; const ok=ex.answers.some(ans=>normalize(ans)===normalize(user)); markAnswer(ok); showFeedback(ok, ok ? `${displayKa(ex.item)} — ${ex.item.ru}` : `Правильно: ${ex.item.ka} / ${ex.item.tr}`); return; }
     if(target.dataset.insert) { const input=$('#typeInput'); if(input) insertAtCursor(input,target.dataset.insert); return; }
     if(target.dataset.hint !== undefined && session) { const ex=session.exercises[session.index]; showFeedback(false, `Подсказка: ${ex.item.ka} · ${ex.item.tr} · ${ex.item.exampleRu || ''}`); return; }
@@ -236,5 +300,9 @@
   $('#iphoneBtn').addEventListener('click', () => $('#installDialog').showModal());
   $('#closeInstall').addEventListener('click', () => $('#installDialog').close());
   if('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
-  window.speechSynthesis?.getVoices?.(); applyTheme(); setRoute(state.route || 'home');
+  if('speechSynthesis' in window) {
+    window.speechSynthesis.getVoices?.();
+    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices?.();
+  }
+  applyTheme(); setRoute(state.route || 'home');
 })();
